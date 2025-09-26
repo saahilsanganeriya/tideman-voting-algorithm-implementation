@@ -85,7 +85,7 @@ tideman-voting-algorithm/
 
 ## 📚 Learn More
 
-For detailed information about the project background, voting theory, implementation challenges, and technical deep-dive, see [tideman_explanation.md](tideman_explanation.md).
+For detailed information about the project background, voting theory, implementation challenges, and technical deep-dive, see [Tideman_explanation.md](Tideman_explanation.md).
 
 ## 🎓 Academic Context
 
