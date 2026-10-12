@@ -1,0 +1,7 @@
+tideman
+*.o
+test_output.txt
+demo_election.dat
+load_test.txt
+interactive_test.txt
+.DS_Store
