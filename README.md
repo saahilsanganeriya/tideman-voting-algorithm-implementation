@@ -1,101 +1,167 @@
-# Tideman Voting Algorithm
+# Tideman voting in C
 
-A comprehensive implementation of the Tideman (ranked pairs) voting method with advanced analytics, multiple voting system comparisons, and election simulation capabilities.
+A command-line program that runs a ranked-pairs (Tideman) election and sets the result beside other voting
+rules. It started as the Tideman problem in Harvard's CS50 (Problem Set 3) and grew into one C file of
+1,323 lines. Beyond the problem set, it can compare voting rules, simulate random elections, and save and
+load elections.
 
-## 🏆 Overview
+Each voter ranks every candidate. The program then reports:
 
-The Tideman voting method is a ranked-choice voting system that guarantees to elect the Condorcet winner when one exists. This implementation extends beyond the basic algorithm to provide a complete voting analysis platform with professional-grade features and insights.
+- the ranked-pairs winner, with the locked graph and every head-to-head margin;
+- the Condorcet winner, if there is one, and a check for three candidates that beat each other in a circle;
+- the Borda count winner and an estimated plurality winner (see below);
+- a 0–10 "competitiveness" figure built from the margins.
 
-## ✨ Key Features
+## The methods, as the code implements them
 
-- **🗳️ Tideman Algorithm**: Full implementation with cycle detection and graph optimization
-- **📊 Advanced Analytics**: Comprehensive statistics, competitiveness scoring, and margin analysis  
-- **🔍 Multiple Methods**: Compare results from Tideman, Plurality, Borda Count, and Condorcet voting
-- **🎲 Election Simulation**: Monte Carlo simulation with statistical analysis across thousands of elections
-- **💾 Data Persistence**: Save and load election results for future analysis
-- **🖥️ Interactive Interface**: User-friendly command-line interface with multiple operation modes
-- **⚡ Performance Monitoring**: Algorithm optimization with execution time and complexity analysis
+**Ranked pairs (Tideman).** For every pair of candidates, count how many voters ranked one above the other
+(`record_preferences`). Keep each pair one candidate wins outright (`add_pairs`), sort those wins from the
+largest margin to the smallest (`sort_pairs`), then add them to a directed graph in that order, skipping any
+win whose loser can already reach its winner by following arrows, since locking it would close a cycle
+(`lock_pairs`). The winner is the candidate with no arrow pointing at them (`print_winner`). If one
+candidate beats every other head to head, ranked pairs always picks them.
 
-## 🚀 Quick Start
+**Condorcet winner.** A candidate who beats every other candidate head to head. There may be none: with
+three candidates, A can beat B, B beat C and C beat A. The paradox check looks for exactly that pattern
+among every set of three candidates.
 
-### Compilation
+**Borda count.** On each ballot a candidate scores one point for every candidate ranked below them, so first
+of three scores 2 and last scores 0. The program sums these from the pairwise table, which gives the same
+totals as scoring each ballot.
+
+**Plurality (estimated).** Plurality should count first choices. The program keeps only the pairwise table,
+not the ballots, so it estimates first-place votes as a candidate's pairwise total divided by the number of
+opponents. That is the Borda score scaled down, so the "plurality" and Borda winners almost always match. In
+the demo below the estimate even ties Alice and Bob at 5, while the true first-choice counts are 4, 3 and 2.
+
+**Competitiveness.** `10 - 20 × (average winning margin ÷ number of voters)`, clamped to 0–10. Smaller
+margins give a higher score. It is a figure this program defines, not a standard measure.
+
+## Build and run
+
 ```bash
 gcc -o tideman tideman.c
 ```
 
-### Basic Usage
+It needs only the C standard library. Small `scanf` helpers stand in for CS50's `get_int` and `get_string`,
+so the CS50 library is not needed. Built and run with gcc 13.3 on Ubuntu 24.04, where gcc prints one
+format-overflow warning about the date string.
+
 ```bash
-# Run an election with candidates
-./tideman Alice Bob Charlie
-
-# Interactive mode
-./tideman -i
-
-# Load saved election data
-./tideman -load election_data.txt
-
-# Run demo with test cases
-./demo.sh
+./tideman Alice Bob Charlie      # election name, number of voters, then each voter's ranking
+./tideman -load demo_election.dat  # reprint the results of a saved election
+./tideman -i                     # menu: load an election, or simulate elections
+./demo.sh                        # scripted 9-voter election; build ./tideman first
 ```
 
-## 📊 Example Output
+Candidate names are single words (at most 15 candidates). An unknown name at a rank prompt asks again. At the
+end the program offers to save the election to a file.
+
+`demo.sh` pipes a fixed election into `./tideman` and writes `test_output.txt` (the full results),
+`demo_election.dat` (the saved election), `load_test.txt` and `interactive_test.txt`.
+
+### Simulation
+
+Simulation runs from the menu and uses the candidates of a loaded election (three or more). After
+`./demo.sh` has written `demo_election.dat`:
+
+```bash
+printf '2\ndemo_election.dat\n3\n1000\n4\n' | ./tideman -i
+```
+
+Each simulated election has 10 to 100 voters, and each voter's ranking is a random shuffle of the candidates.
+For every election it records the winner under each method and whether a Condorcet winner exists. At the end
+it prints how often each candidate won under each method, the share of elections with no Condorcet winner, and
+the average competitiveness. The "agreement" lines compare how often each method picked each candidate across
+all runs, not whether two methods picked the same winner in the same election, so they are an upper bound.
+The random generator is seeded from the clock, so numbers change from run to run.
+
+## Example: the demo election
+
+`demo.sh` casts these nine ballots:
+
+| Voter | 1st | 2nd | 3rd |
+|---|---|---|---|
+| 1 | Alice | Bob | Charlie |
+| 2 | Alice | Bob | Charlie |
+| 3 | Bob | Alice | Charlie |
+| 4 | Charlie | Alice | Bob |
+| 5 | Alice | Charlie | Bob |
+| 6 | Bob | Charlie | Alice |
+| 7 | Alice | Bob | Charlie |
+| 8 | Bob | Alice | Charlie |
+| 9 | Charlie | Bob | Alice |
+
+Head to head, Alice beats Bob 5–4 (voters 1, 2, 4, 5, 7), Alice beats Charlie 6–3 and Bob beats Charlie 6–3.
+Sorted by margin, the program locks Alice → Charlie, Bob → Charlie, then Alice → Bob. None closes a cycle,
+nothing points at Alice, and she wins. Part of `test_output.txt`:
 
 ```
+═══ TIDEMAN METHOD WINNER ═══
 🏆 TIDEMAN WINNER: Alice
 
 ═══ VOTING METHOD COMPARISON ═══
 Plurality Winner: Alice
-Borda Count Winner: Bob  
+Borda Count Winner: Alice
 Condorcet Winner: Alice
 
-═══ CANDIDATE STATISTICS ═══
-Candidate     H2H Wins  H2H Losses  Condorcet%  Condorcet Winner
-────────────────────────────────────────────────────────────────
-Alice              2           0      100.0%              YES
-Bob                1           1       50.0%               NO  
-Charlie            0           2        0.0%               NO
+═══ PREFERENCE MATRIX ═══
+(Row candidate preferred over column candidate)
 
-Election Competitiveness Score: 7.2/10.0
+               Alice     Bob Charlie
+Alice              -       5       6
+Bob                4       -       6
+Charlie            3       3       -
+
+═══ LOCKED PAIRS GRAPH ═══
+(Arrows show locked preferences)
+
+Alice → Bob (margin: 1)
+Alice → Charlie (margin: 3)
+Bob → Charlie (margin: 3)
+
+═══ MARGIN ANALYSIS ═══
+Alice beats Charlie by 3 votes (33.3%)
+Bob beats Charlie by 3 votes (33.3%)
+Alice beats Bob by 1 votes (11.1%)
+Smallest margin: 1 votes
+Largest margin: 3 votes
+
+Election Competitiveness Score: 4.81/10.0
 ```
 
-## 🎯 Use Cases
+The Borda totals are Alice 11, Bob 10 and Charlie 6. The competitiveness is 10 − 20 × ((1 + 3 + 3) ÷ 3 ÷ 9) = 4.81.
 
-- **Academic Research**: Analyze voting theory and social choice mechanisms
-- **Educational Tool**: Demonstrate different voting methods and their outcomes
-- **Election Analysis**: Compare how different voting systems would affect real elections
-- **Algorithm Study**: Understand graph algorithms, cycle detection, and optimization techniques
+## Saved election format
 
-## 📁 Project Structure
+Plain text: the line `ELECTION_DATA`, the election name, the date, the number of candidates, the number of
+voters, one candidate name per line, then the pairwise table one row per line. Loading rebuilds the pairs and
+the locked graph from the table. The ballots themselves are not saved.
 
-```
-tideman-voting-algorithm/
-├── README.md              # This file - basic overview
-├── DOCUMENTATION.md       # Detailed project explanation and theory
-├── tideman.c             # Main implementation
-├── tideman               # Compiled executable  
-└── demo.sh               # Demonstration script
-```
+## Known limits
 
-## 🔬 Technical Highlights
+- Running fewer than 10 simulations crashes with a floating-point exception: the progress check divides by
+  `num_simulations / 10`, which is 0.
+- Menu option 1 ("Run New Election") is not implemented; it prints a note and returns to the menu.
+- The first character of the election name is dropped (`tideman.c` line 441 reads one character before the
+  name), so "Student Council Election 2025" is saved as "tudent Council Election 2025".
+- A ballot may name the same candidate twice; the program does not reject it.
+- The functions ending in `_optimized` (merge sort and a depth-first cycle check) are never called, so
+  "Operations performed" in the performance section is always 0. The complexity lines printed there are
+  formulas, not measurements.
 
-- **Algorithm Complexity**: O(n³) cycle detection with optimization techniques
-- **Memory Efficient**: Optimized data structures for large candidate sets
-- **Robust Error Handling**: Comprehensive input validation and edge case management
-- **Modular Design**: Clean separation of concerns with well-documented functions
+## Files
 
-## 📚 Learn More
+| File | What it is |
+|---|---|
+| `tideman.c` | the whole program |
+| `demo.sh` | the scripted demo election and smoke checks |
+| `LICENSE` | MIT |
 
-For detailed information about the project background, voting theory, implementation challenges, and technical deep-dive, see [Tideman_explanation.md](Tideman_explanation.md).
+## Credits and licence
 
-## 🎓 Academic Context
-
-This project demonstrates advanced computer science concepts including:
-- Graph algorithms and cycle detection
-- Computational social choice theory
-- Algorithm optimization and performance analysis
-- Statistical simulation and Monte Carlo methods
-- Software engineering best practices
-
----
-
-**Note**: This implementation is designed for educational and research purposes, showcasing advanced programming techniques and voting theory concepts.
+Written by Saahil Sanganeriya. The starting point is CS50's Tideman distribution code: the outline of `main`
+(usage check, ballot loop, then the add, sort and lock calls), the global tables, and the empty `vote`,
+`record_preferences`, `add_pairs`, `sort_pairs`, `lock_pairs` and `print_winner` with their comments. CS50 course materials are licensed
+[CC BY-NC-SA 4.0](https://cs50.harvard.edu/x/license/). Everything else is released under the MIT licence in
+[`LICENSE`](LICENSE).
